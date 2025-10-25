@@ -1,30 +1,28 @@
 package com.blue.cvAnalisis.controller;
 
+import com.blue.cvAnalisis.model.ApiResponse;
 import com.blue.cvAnalisis.model.EmailRequest;
-import com.blue.cvAnalisis.service.EmailService;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import com.blue.cvAnalisis.service.AnalisisService;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api")
 public class Controller {
 
-    private final EmailService emailService;
+    private final AnalisisService analisisService;
 
-    public Controller(EmailService emailService) {
-        this.emailService = emailService;
+    public Controller(AnalisisService analisisService) {
+        this.analisisService = analisisService;
     }
 
-
-    @GetMapping
-    public EmailRequest testEmail() {
-        EmailRequest emailRequest = new EmailRequest();
-        emailRequest.setTo("alblue9817@gmail.com");
-        emailRequest.setSubject("Test Email");
-        emailRequest.setBody("This is blue demon");
-      return  emailService.sendEmailRequest(emailRequest);
-
+    @PostMapping
+    public ApiResponse<EmailRequest> analisisCv(
+            @RequestParam("file") MultipartFile file
+    ) {
+        analisisService.analisisCv(file);
+        return new ApiResponse<>(200, "CV analyzed successfully", null);
     }
+
 
 }

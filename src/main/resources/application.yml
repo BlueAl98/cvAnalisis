@@ -1,6 +1,9 @@
 spring:
   application:
     name: micro-message
+    base-url-micro-send: http://localhost:8082
+    base-url-micro-ai: http://localhost:8083
+    base-url-micro-extract: http://localhost:8081
 
   rabbitmq:
     host: localhost
