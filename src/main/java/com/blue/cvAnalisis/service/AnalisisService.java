@@ -1,8 +1,6 @@
 package com.blue.cvAnalisis.service;
 
-import com.blue.cvAnalisis.model.ApiResponse;
-import com.blue.cvAnalisis.model.DocumentResponse;
-import com.blue.cvAnalisis.model.EmailRequest;
+import com.blue.cvAnalisis.model.*;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
@@ -45,7 +43,10 @@ public class AnalisisService {
 
     public String analisisCv(MultipartFile file) {
 
-        System.out.println(extracText(file).getExtractedText());
+        String textExtracted = extracText(file).getExtractedText();
+
+         CvAnalysisResult cvAnalysisResult = analizeCvText(textExtracted, "Android developer kotlin");
+         System.out.println("CV Analysis Result: " + cvAnalysisResult);
         return "CV analyzed successfully";
 
     }
@@ -100,6 +101,29 @@ public class AnalisisService {
         }
 
     }
+
+    public CvAnalysisResult analizeCvText(String cvText, String targetProfile) {
+        try {
+
+            Mono<ApiResponse<CvAnalysisResult>> response = webClient.post()
+                    .uri(baseUrlAi+"/ai/cvAnalisis")
+                    .bodyValue(new RequestAICv(cvText, targetProfile))
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<>() {
+                    });
+
+            // If you want to block and wait for response (optional)
+            ApiResponse<CvAnalysisResult> result = response.block();
+            return result.getData();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+
+    }
+
+
 
 
 }
