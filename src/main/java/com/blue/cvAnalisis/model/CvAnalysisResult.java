@@ -2,12 +2,11 @@ package com.blue.cvAnalisis.model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
-import lombok.Data;
 import lombok.NoArgsConstructor;
 import java.util.List;
 
 
-@Data
+
 @NoArgsConstructor
 @AllArgsConstructor
 public class CvAnalysisResult {
@@ -17,43 +16,38 @@ public class CvAnalysisResult {
     private KeyPoints keyPoints;
     @JsonProperty("improvement_tips")
     private List<String> improvementTips;
+
+
+    public Candidate getCandidate() {
+        return candidate;
+    }
+
+    public void setCandidate(Candidate candidate) {
+        this.candidate = candidate;
+    }
+
+    public KeyPoints getKeyPoints() {
+        return keyPoints;
+    }
+
+    public void setKeyPoints(KeyPoints keyPoints) {
+        this.keyPoints = keyPoints;
+    }
+
+    public List<String> getImprovementTips() {
+        return improvementTips;
+    }
+
+    public void setImprovementTips(List<String> improvementTips) {
+        this.improvementTips = improvementTips;
+    }
+
+    public Evaluation getEvaluation() {
+        return evaluation;
+    }
+
+    public void setEvaluation(Evaluation evaluation) {
+        this.evaluation = evaluation;
+    }
 }
 
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-class Candidate {
-    private String name;
-
-    @JsonProperty("years_experience")
-    private int yearsExperience;
-
-    private String summary;
-}
-
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-class Evaluation {
-    @JsonProperty("technical_match")
-    private double technicalMatch;
-
-    @JsonProperty("experience_match")
-    private double experienceMatch;
-
-    @JsonProperty("overall_score")
-    private double overallScore;
-
-    private String verdict;
-}
-
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-class KeyPoints {
-    private List<String> strengths;
-    private List<String> weaknesses;
-
-    @JsonProperty("recommended_questions")
-    private List<String> recommendedQuestions;
-}

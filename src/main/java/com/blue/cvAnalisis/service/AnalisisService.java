@@ -1,20 +1,30 @@
 package com.blue.cvAnalisis.service;
 
 import com.blue.cvAnalisis.model.*;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
+
+@Slf4j
 @Service
 public class AnalisisService {
+
+    private static final String EMAIL_EXCHANGE = "email.exchange";
+    private static final String EMAIL_ROUTING_KEY = "email.send";
+    private static final String EMAIL_QUEUE = "email.queue";
+
 
     private final RabbitTemplate rabbitTemplate;
 
@@ -35,95 +45,127 @@ public class AnalisisService {
         this.rabbitTemplate = rabbitTemplate;
     }
 
-    public EmailRequest sendEmailRequest(EmailRequest emailRequest) {
-        rabbitTemplate.convertAndSend("email.exchange", "email.send", emailRequest);
-        System.out.println("📤 Sent message to RabbitMQ: " + emailRequest);
-        return emailRequest;
-    }
 
-    public String analisisCv(MultipartFile file) {
-
-        String textExtracted = extracText(file).getExtractedText();
-
-         CvAnalysisResult cvAnalysisResult = analizeCvText(textExtracted, "Android developer kotlin");
-         System.out.println("CV Analysis Result: " + cvAnalysisResult);
-        return "CV analyzed successfully";
-
-    }
-
-
-    @RabbitListener(queues = "email.queue")
-    public void receiveEmailMessage(EmailRequest emailRequest) {
+    /**
+     * 🔹 Main flow: extract text → analyze → send email
+     */
+    public ResponseEntity<ApiResponse<CvAnalysisResult>> analisisCv(MultipartFile file) {
         try {
-            Mono<ApiResponse<EmailRequest>> response = webClient.post()
-                    .uri(baseUrlMicroExtract+"/email")
-                    .bodyValue(emailRequest) // send as JSON
-                    .retrieve()
-                    .bodyToMono(new ParameterizedTypeReference<>() {
-                    });
+            DocumentResponse extracted = extracText(file);
+            if (extracted == null) {
+                return new ResponseEntity<>(new ApiResponse<>(400, "Error analyzing CV text", null), HttpStatus.BAD_REQUEST);
+            }
 
-            // If you want to block and wait for response (optional)
-            ApiResponse<EmailRequest> result = response.block();
-            System.out.println("Response from microservice: " + result);
+            CvAnalysisResult analysis = analizeCvText(extracted.getExtractedText(), "Android developer kotlin");
+            if (analysis == null) {
+                return new ResponseEntity<>(new ApiResponse<>(400, "Error analyzing CV text", null), HttpStatus.BAD_REQUEST);
+            }
+
+            EmailRequest email = new EmailRequest("alblue9817@gmail.com", "Test App", buildEmailBody(analysis));
+            sendEmailRequest(email);
+            return new ResponseEntity<>(new ApiResponse<>(200, "CV analyzed and email request sent", analysis), HttpStatus.OK);
 
         } catch (Exception e) {
-            e.printStackTrace();
+            return new ResponseEntity<>(new ApiResponse<>(400, "Error analyzing CV text", null), HttpStatus.BAD_REQUEST);
         }
     }
 
+    /**
+     * 🔹 Send email request to RabbitMQ
+     */
+    public void sendEmailRequest(EmailRequest emailRequest) {
+        rabbitTemplate.convertAndSend(EMAIL_EXCHANGE, EMAIL_ROUTING_KEY, emailRequest);
+    }
 
-    public DocumentResponse extracText (MultipartFile file) {
+    /**
+     * 🔹 Listen for messages from the email queue
+     */
+    @RabbitListener(queues = EMAIL_QUEUE)
+    public void receiveEmailMessage(EmailRequest emailRequest) {
+        callPostApi(baseUrlMicroSend + "/email", emailRequest, new ParameterizedTypeReference<ApiResponse<EmailRequest>>() {});
+    }
+
+    /**
+     * 🔹 Extract text from uploaded CV
+     */
+    public DocumentResponse extracText(MultipartFile file) {
         try {
-
             MultipartBodyBuilder builder = new MultipartBodyBuilder();
             builder.part("file", new ByteArrayResource(file.getBytes()) {
                 @Override
                 public String getFilename() {
-                    return file.getOriginalFilename(); // necessary for multipart
+                    return file.getOriginalFilename();
                 }
             });
 
-            Mono<ApiResponse<DocumentResponse>> response = webClient.post()
-                    .uri(baseUrlMicroExtract+"/documents")
-                    .contentType(MediaType.MULTIPART_FORM_DATA)
-                    .bodyValue(builder.build())
-                    .retrieve()
-                    .bodyToMono(new ParameterizedTypeReference<>() {
-                    });
+            ApiResponse<DocumentResponse> response = callPostApi(
+                    baseUrlMicroExtract + "/documents",
+                    builder.build(),
+                    new ParameterizedTypeReference<>() {
+                    },
+                    MediaType.MULTIPART_FORM_DATA
+            );
 
-            // If you want to block and wait for response (optional)
-            ApiResponse<DocumentResponse> result = response.block();
-            return result.getData();
-
+            return response != null ? response.getData() : null;
         } catch (Exception e) {
-            e.printStackTrace();
             return null;
         }
-
     }
 
+    /**
+     * 🔹 Send text to AI microservice for analysis
+     */
     public CvAnalysisResult analizeCvText(String cvText, String targetProfile) {
-        try {
-
-            Mono<ApiResponse<CvAnalysisResult>> response = webClient.post()
-                    .uri(baseUrlAi+"/ai/cvAnalisis")
-                    .bodyValue(new RequestAICv(cvText, targetProfile))
-                    .retrieve()
-                    .bodyToMono(new ParameterizedTypeReference<>() {
-                    });
-
-            // If you want to block and wait for response (optional)
-            ApiResponse<CvAnalysisResult> result = response.block();
-            return result.getData();
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            return null;
-        }
-
+        ApiResponse<CvAnalysisResult> response = callPostApi(
+                baseUrlAi + "/ai/cvAnalisis",
+                new RequestAICv(cvText, targetProfile),
+                new ParameterizedTypeReference<>() {
+                }
+        );
+        return response != null ? response.getData() : null;
     }
 
+    /**
+     * 🔹 Generic POST call helper with optional content type
+     */
+    private <T> ApiResponse<T> callPostApi(String url, Object body, ParameterizedTypeReference<ApiResponse<T>> type) {
+        return callPostApi(url, body, type, MediaType.APPLICATION_JSON);
+    }
 
+    private <T> ApiResponse<T> callPostApi(String url, Object body, ParameterizedTypeReference<ApiResponse<T>> type, MediaType mediaType) {
+        try {
+            Mono<ApiResponse<T>> response = webClient.post()
+                    .uri(url)
+                    .contentType(mediaType)
+                    .bodyValue(body)
+                    .retrieve()
+                    .bodyToMono(type);
 
+            ApiResponse<T> result = response.block();
+            return result;
+        } catch (Exception e) {
+            return null;
+        }
+    }
 
+    private String buildEmailBody(CvAnalysisResult result) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("📄 Candidate Analysis Report\n\n")
+                .append("👤 Name: ").append(result.getCandidate().getName()).append("\n")
+                .append("🧠 Summary: ").append(result.getCandidate().getSummary()).append("\n\n")
+                .append("⚙️ Technical Match: ").append(result.getEvaluation().getTechnicalMatch()).append("%\n")
+                .append("💼 Experience Match: ").append(result.getEvaluation().getExperienceMatch()).append("%\n")
+                .append("⭐ Overall Score: ").append(result.getEvaluation().getOverallScore()).append("%\n")
+                .append("🗣 Verdict: ").append(result.getEvaluation().getVerdict()).append("\n\n")
+                .append("💪 Strengths:\n - ")
+                .append(String.join("\n - ", result.getKeyPoints().getStrengths())).append("\n\n")
+                .append("⚠️ Weaknesses:\n - ")
+                .append(String.join("\n - ", result.getKeyPoints().getWeaknesses())).append("\n\n")
+                .append("❓ Recommended Questions:\n - ")
+                .append(String.join("\n - ", result.getKeyPoints().getRecommendedQuestions())).append("\n\n")
+                .append("💡 Improvement Tips:\n - ")
+                .append(String.join("\n - ", result.getImprovementTips()));
+
+        return sb.toString();
+    }
 }

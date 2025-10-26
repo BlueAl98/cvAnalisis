@@ -12,11 +12,6 @@ import java.time.Duration;
 @Configuration
 public class WebClientConfiguration {
 
-/*    @Bean
-    public WebClient myWebClient() {  // <--- different name
-        return WebClient.builder().build();
-    }*/
-
 
     @Bean
     public WebClient myWebClient(WebClient.Builder builder) {
