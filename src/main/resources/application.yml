@@ -1,12 +1,16 @@
 spring:
   application:
-    name: micro-message
-    base-url-micro-send: http://localhost:8082
-    base-url-micro-ai: http://localhost:8083
-    base-url-micro-extract: http://localhost:8081
+    name: cv-analisis
+    base-url-micro-send: ${BASE_URL_MICRO_SEND:http://localhost:8082}
+    base-url-micro-ai: ${BASE_URL_MICRO_AI:http://localhost:8083}
+    base-url-micro-extract: ${BASE_URL_MICRO_EXTRACT:http://localhost:8081}
+
 
   rabbitmq:
-    host: localhost
-    port: 5672
-    username: guest
-    password: guest
+    host: ${HOST_RABBITMQ:localhost}
+    port: ${PORT_RABBITMQ:5672}
+    username: ${USERNAME_RABBITMQ:blue}
+    password: ${PASSWORD_RABBITMQ:blue1234}
+
+  parameters:
+    max_Simultaneos_Request: ${MAX_SIMULTANEOUS_REQUESTS:2}

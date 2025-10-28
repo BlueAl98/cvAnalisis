@@ -24,6 +24,7 @@ public class AnalisisService {
     private static final String EMAIL_EXCHANGE = "email.exchange";
     private static final String EMAIL_ROUTING_KEY = "email.send";
     private static final String EMAIL_QUEUE = "email.queue";
+    private static final String SUBJECT_EMAIL = "Analisis CV";
 
 
     private final RabbitTemplate rabbitTemplate;
@@ -49,19 +50,19 @@ public class AnalisisService {
     /**
      * 🔹 Main flow: extract text → analyze → send email
      */
-    public ResponseEntity<ApiResponse<CvAnalysisResult>> analisisCv(MultipartFile file) {
+    public ResponseEntity<ApiResponse<CvAnalysisResult>> analisisCv(MultipartFile file,  String emailAdress, String targetProfile) {
         try {
             DocumentResponse extracted = extracText(file);
             if (extracted == null) {
                 return new ResponseEntity<>(new ApiResponse<>(400, "Error analyzing CV text", null), HttpStatus.BAD_REQUEST);
             }
 
-            CvAnalysisResult analysis = analizeCvText(extracted.getExtractedText(), "Android developer kotlin");
+            CvAnalysisResult analysis = analizeCvText(extracted.getExtractedText(),  targetProfile);
             if (analysis == null) {
                 return new ResponseEntity<>(new ApiResponse<>(400, "Error analyzing CV text", null), HttpStatus.BAD_REQUEST);
             }
 
-            EmailRequest email = new EmailRequest("alblue9817@gmail.com", "Test App", buildEmailBody(analysis));
+            EmailRequest email = new EmailRequest(emailAdress, SUBJECT_EMAIL, buildEmailBody(analysis));
             sendEmailRequest(email);
             return new ResponseEntity<>(new ApiResponse<>(200, "CV analyzed and email request sent", analysis), HttpStatus.OK);
 
